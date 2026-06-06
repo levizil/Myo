@@ -1,26 +1,48 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
+import { generateLeanUserStories } from '@myo/core';
 
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
+	console.log('Congratulations, your extension "myo-vs-code" is now active!');
 
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
-	// This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "vscode-wrapper" is now active!');
-
-	// The command has been defined in the package.json file
-	// Now provide the implementation of the command with registerCommand
-	// The commandId parameter must match the command field in package.json
-	const disposable = vscode.commands.registerCommand('vscode-wrapper.helloWorld', () => {
-		// The code you place here will be executed every time your command is executed
-		// Display a message box to the user
-		vscode.window.showInformationMessage('Hello World from vscode-wrapper!');
+	const helloDisposable = vscode.commands.registerCommand('myo.helloWorld', () => {
+		vscode.window.showInformationMessage('Hello World from Myo!');
 	});
 
-	context.subscriptions.push(disposable);
+	const userStoriesDisposable = vscode.commands.registerCommand('myo.generateUserStories', async () => {
+		const input = await vscode.window.showInputBox({
+			prompt: 'Describe your rough feature idea',
+			placeHolder: 'e.g., A dark mode toggle in the settings menu',
+			ignoreFocusOut: true
+		});
+
+		if (!input || !input.trim()) {
+			return;
+		}
+
+		const config = vscode.workspace.getConfiguration('myo.ollama');
+		const baseUrl = config.get<string>('url') || 'http://localhost:11434';
+		const model = config.get<string>('model') || 'llama3.1:8b';
+
+		await vscode.window.withProgress({
+			location: vscode.ProgressLocation.Notification,
+			title: 'Generating Lean user stories...',
+			cancellable: false
+		}, async () => {
+			try {
+				const result = await generateLeanUserStories(input, { baseUrl, model });
+				
+				const doc = await vscode.workspace.openTextDocument({
+					content: result,
+					language: 'markdown'
+				});
+				await vscode.window.showTextDocument(doc);
+			} catch (err: any) {
+				vscode.window.showErrorMessage(`Failed to generate user stories: ${err.message}`);
+			}
+		});
+	});
+
+	context.subscriptions.push(helloDisposable, userStoriesDisposable);
 }
 
-// This method is called when your extension is deactivated
 export function deactivate() {}

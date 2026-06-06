@@ -4,7 +4,7 @@
   "description": "vscode wrapper around @myo",
   "version": "0.0.1",
   "engines": {
-    "vscode": "^1.120.0"
+    "vscode": "^1.107.0"
   },
   "categories": [
     "AI"
@@ -18,8 +18,27 @@
       {
         "command": "myo.helloWorld",
         "title": "Hello World"
+      },
+      {
+        "command": "myo.generateUserStories",
+        "title": "Myo: Generate Lean User Stories"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Myo (Ollama)",
+      "properties": {
+        "myo.ollama.url": {
+          "type": "string",
+          "default": "http://localhost:11434",
+          "description": "The base URL of the local Ollama server."
+        },
+        "myo.ollama.model": {
+          "type": "string",
+          "default": "llama3.1:8b",
+          "description": "The Ollama model to use for chat and generation."
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
@@ -36,7 +55,7 @@
     "test": "vscode-test"
   },
   "devDependencies": {
-    "@types/vscode": "^1.120.0",
+    "@types/vscode": "^1.107.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
     "typescript-eslint": "^8.56.1",

@@ -11,9 +11,9 @@
     "doc": "docs"
   },
   "scripts": {
-    "compile": "tsc -b",
-    "watch": "tsc -b -w",
-    "lint": "eslint packages/core/src packages/vscode-extension/src",
+    "compile": "npm run build --workspace=@myo/core && npm run compile --workspace=myo-vs-code",
+    "watch": "npm run watch --workspaces --if-present",
+    "lint": "eslint packages/core/src packages/vscode-wrapper/src",
     "test": "npm run test --workspaces --if-present"
   },
   "repository": {
