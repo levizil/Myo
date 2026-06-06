@@ -9,15 +9,59 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onView:myo.chatView"
+  ],
   "main": "./out/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "myo-sidebar",
+          "title": "Myo",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "myo-sidebar": [
+        {
+          "type": "webview",
+          "id": "myo.chatView",
+          "name": "Myo Chat"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "myo.helloWorld",
         "title": "Hello World"
+      },
+      {
+        "command": "myo.selectOllamaModel",
+        "title": "Myo: Select Ollama Model"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Myo (Ollama)",
+      "properties": {
+        "myo.ollama.url": {
+          "type": "string",
+          "default": "http://localhost:11434",
+          "description": "The base URL of the local Ollama server."
+        },
+        "myo.ollama.model": {
+          "type": "string",
+          "default": "llama3.1:8b",
+          "description": "The Ollama model to use for chat."
+        },
+        "myo.ollama.systemPrompt": {
+          "type": "string",
+          "default": "You are a helpful programming assistant inside VS Code.",
+          "description": "The system prompt / instructions to send to the Ollama model."
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
@@ -28,13 +72,13 @@
     "test": "vscode-test"
   },
   "devDependencies": {
-    "@types/vscode": "^1.120.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
-    "typescript-eslint": "^8.56.1",
+    "@types/vscode": "^1.120.0",
+    "@vscode/test-cli": "^0.0.11",
+    "@vscode/test-electron": "^2.5.2",
     "eslint": "^9.39.3",
     "typescript": "^5.9.3",
-    "@vscode/test-cli": "^0.0.12",
-    "@vscode/test-electron": "^2.5.2"
+    "typescript-eslint": "^8.56.1"
   }
 }
