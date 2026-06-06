@@ -1,6 +1,6 @@
-# myo README
+# vscode-wrapper README
 
-This is the README for your extension "myo". After writing up a brief description, we recommend including the following sections.
+This is the README for your extension "vscode-wrapper". After writing up a brief description, we recommend including the following sections.
 
 ## Features
 

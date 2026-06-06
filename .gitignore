@@ -1,5 +1,27 @@
-out
-dist
-node_modules
+# Dependencies
+node_modules/
+/packages/*/node_modules/
+
+# Production/Build outputs
+out/
+dist/
+/packages/*/out/
+/packages/*/dist/
+*.tsbuildinfo
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# VS Code test downloads and run outputs
 .vscode-test/
-*.vsix
+.vscode-test-electron/
+
+# OS metadata files
+.DS_Store
+Thumbs.db
+
+# ESLint cache
+.eslintcache

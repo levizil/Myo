@@ -1,0 +1,18 @@
+{
+  "name": "@myo/core",
+  "version": "0.0.1",
+  "description": "Core LLM orchestration and logic for Myo",
+  "main": "out/index.js",
+  "types": "out/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "watch": "tsc -b -w"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module"
+}
