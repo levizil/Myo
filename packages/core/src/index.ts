@@ -240,25 +240,35 @@ ${instruction || 'Explain the technical choices.'}`;
 		throw new Error('Received empty response from Ollama.');
 	}
 
-	// Regex extraction (ADR 001 / ADR 003)
-	const jsonFenceMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/);
-	if (!jsonFenceMatch) {
-		// Fallback: see if the whole text can be parsed as JSON directly
-		try {
-			const rawParsed = JSON.parse(responseText.trim());
-			return AdrSchema.parse(rawParsed);
-		} catch (e) {
-			throw new Error('Failed to locate ```json ``` fences in the model output.');
-		}
-	}
-
-	const jsonText = jsonFenceMatch[1].trim();
+	const jsonText = extractJsonFromMarkdown(responseText);
 
 	// Parse and Validate (ADR 003)
 	try {
 		const rawObj = JSON.parse(jsonText);
 		return AdrSchema.parse(rawObj);
 	} catch (parseError: any) {
+		// If parsing fails, see if the raw response text can be parsed directly as a fallback
+		if (jsonText !== responseText.trim()) {
+			try {
+				const rawParsedFallback = JSON.parse(responseText.trim());
+				return AdrSchema.parse(rawParsedFallback);
+			} catch (e) {
+				// Fall through to throw validation error
+			}
+		}
 		throw new Error(`ADR schema validation failed: ${parseError.message}`);
 	}
+}
+
+/**
+ * Extracts raw text from standard triple-backtick Markdown fences.
+ * If no fences are detected, returns the input text trimmed.
+ * @param text The input string potentially containing markdown fences
+ */
+export function extractJsonFromMarkdown(text: string): string {
+	const match = text.match(/```json\s*([\s\S]*?)\s*```/);
+	if (!match) {
+		return text.trim();
+	}
+	return match[1].trim();
 }
