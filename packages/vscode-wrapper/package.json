@@ -26,6 +26,10 @@
       {
         "command": "myo.generateADR",
         "title": "Myo: Generate ADR Draft"
+      },
+      {
+        "command": "myo.generateC4Diagram",
+        "title": "Myo: Generate C4 Diagram"
       }
     ],
     "configuration": {
