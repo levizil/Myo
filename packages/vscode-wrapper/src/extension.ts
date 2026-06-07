@@ -7,8 +7,28 @@ import {
 	parseLeanUserStoriesFromMarkdown
 } from '@myo/core';
 
+class MyoVirtualDocumentProvider implements vscode.TextDocumentContentProvider {
+	private _onDidChange = new vscode.EventEmitter<vscode.Uri>();
+	readonly onDidChange = this._onDidChange.event;
+
+	private documents = new Map<string, string>();
+
+	provideTextDocumentContent(uri: vscode.Uri): string {
+		return this.documents.get(uri.toString()) || '';
+	}
+
+	setDocumentContent(uri: vscode.Uri, content: string) {
+		this.documents.set(uri.toString(), content);
+		this._onDidChange.fire(uri);
+	}
+}
+
 export function activate(context: vscode.ExtensionContext) {
 	console.log('Congratulations, your extension "myo-vs-code" is now active!');
+
+	const virtualDocProvider = new MyoVirtualDocumentProvider();
+	const providerRegistration = vscode.workspace.registerTextDocumentContentProvider('myo', virtualDocProvider);
+	context.subscriptions.push(providerRegistration);
 
 	const helloDisposable = vscode.commands.registerCommand('myo.helloWorld', () => {
 		vscode.window.showInformationMessage('Hello World from Myo!');
@@ -29,8 +49,9 @@ export function activate(context: vscode.ExtensionContext) {
 
 	const userStoriesDisposable = vscode.commands.registerCommand('myo.generateUserStories', async (prefilledInput?: string) => {
 		let input = prefilledInput;
+		const editor = vscode.window.activeTextEditor;
+
 		if (!input) {
-			const editor = vscode.window.activeTextEditor;
 			let selectedText = '';
 			if (editor) {
 				const selection = editor.selection;
@@ -84,10 +105,9 @@ export function activate(context: vscode.ExtensionContext) {
 					githubProjectNumber
 				});
 				
-				const doc = await vscode.workspace.openTextDocument({
-					content: result,
-					language: 'markdown'
-				});
+				const uri = vscode.Uri.parse(`myo:/user-stories/draft-${Date.now()}.md`);
+				virtualDocProvider.setDocumentContent(uri, result);
+				const doc = await vscode.workspace.openTextDocument(uri);
 				await vscode.window.showTextDocument(doc);
 			} catch (err: any) {
 				vscode.window.showErrorMessage(`Failed to generate user stories: ${err.message}`);
@@ -95,7 +115,12 @@ export function activate(context: vscode.ExtensionContext) {
 		});
 	});
 
-	const pushStoriesDisposable = vscode.commands.registerCommand('myo.pushStoriesToBacklog', async () => {
+	const pushSingleStoryDisposable = vscode.commands.registerCommand('myo.pushSingleStoryToBacklog', async (story: any) => {
+		if (!story || !story.role || !story.action || !story.value) {
+			vscode.window.showErrorMessage('Invalid story data provided.');
+			return;
+		}
+
 		const githubConfig = vscode.workspace.getConfiguration('myo.github');
 		const owner = githubConfig.get<string>('owner') || '';
 		const projectNumber = githubConfig.get<number>('projectNumber') || 1;
@@ -105,17 +130,73 @@ export function activate(context: vscode.ExtensionContext) {
 			return;
 		}
 
-		const editor = vscode.window.activeTextEditor;
-		if (!editor) {
-			vscode.window.showWarningMessage('No active Markdown file with user stories.');
+		// Authenticate and get token
+		let githubToken: string | undefined;
+		try {
+			const session = await vscode.authentication.getSession('github', ['project', 'repo'], { createIfNone: true });
+			if (session) {
+				githubToken = session.accessToken;
+			}
+		} catch (err: any) {
+			vscode.window.showErrorMessage(`GitHub authentication is required to push to backlog: ${err.message}`);
 			return;
 		}
 
-		const content = editor.document.getText();
-		const stories = parseLeanUserStoriesFromMarkdown(content);
+		if (!githubToken) {
+			vscode.window.showErrorMessage('GitHub authentication token is required.');
+			return;
+		}
+
+		const client = new GitHubClient(githubToken);
+
+		await vscode.window.withProgress({
+			location: vscode.ProgressLocation.Notification,
+			title: `Pushing story to Backlog: "${story.action}"...`,
+			cancellable: false
+		}, async () => {
+			try {
+				const title = `As a ${story.role}, I want to ${story.action}`;
+				const body = `As a ${story.role}, I want to ${story.action}, So that ${story.value}`;
+				await client.addStoryToBacklog(owner, projectNumber, title, body);
+				vscode.window.showInformationMessage(`Successfully pushed story: "${story.action}"`);
+			} catch (err: any) {
+				vscode.window.showErrorMessage(`Failed to push story "${story.action}": ${err.message}`);
+			}
+		});
+	});
+
+	const pushStoriesDisposable = vscode.commands.registerCommand('myo.pushStoriesToBacklog', async (uri?: vscode.Uri) => {
+		const githubConfig = vscode.workspace.getConfiguration('myo.github');
+		const owner = githubConfig.get<string>('owner') || '';
+		const projectNumber = githubConfig.get<number>('projectNumber') || 1;
+
+		if (!owner) {
+			vscode.window.showWarningMessage('GitHub owner is not configured in VS Code settings. Please set "myo.github.owner".');
+			return;
+		}
+
+		let content = '';
+		if (uri && uri instanceof vscode.Uri) {
+			const doc = vscode.workspace.textDocuments.find(d => d.uri.toString() === uri.toString());
+			if (doc) {
+				content = doc.getText();
+			}
+		}
+
+		if (!content) {
+			const editor = vscode.window.activeTextEditor;
+			if (!editor) {
+				vscode.window.showWarningMessage('No active Markdown file with user stories.');
+				return;
+			}
+			content = editor.document.getText();
+		}
+
+		const cleanedContent = content.replace(/\[\+\]\(command:myo\.pushSingleStoryToBacklog\?[^)]+\)/g, '');
+		const stories = parseLeanUserStoriesFromMarkdown(cleanedContent);
 
 		if (stories.length === 0) {
-			vscode.window.showWarningMessage('Could not find any user stories in the current file matching: "As a ..., I want to ..., So that ...".');
+			vscode.window.showWarningMessage('Could not find any user stories in the current context matching: "As a ..., I want to ..., So that ...".');
 			return;
 		}
 
@@ -225,10 +306,9 @@ Here are the current items in the "Icebox" column of your Project board:
 ${items.map(item => `## ${item.title}\n\n${item.body}`).join('\n\n')}
 `;
 
-				const doc = await vscode.workspace.openTextDocument({
-					content: markdownContent,
-					language: 'markdown'
-				});
+				const uri = vscode.Uri.parse(`myo:/icebox/items-${Date.now()}.md`);
+				virtualDocProvider.setDocumentContent(uri, markdownContent);
+				const doc = await vscode.workspace.openTextDocument(uri);
 				await vscode.window.showTextDocument(doc);
 			} catch (err: any) {
 				vscode.window.showErrorMessage(`Failed to fetch Icebox items: ${err.message}`);
@@ -305,10 +385,9 @@ ${adrData.consequences.positive.map(p => `* ${p}`).join('\n')}
 ${adrData.consequences.negative.map(n => `* ${n}`).join('\n')}
 `;
 				
-				const doc = await vscode.workspace.openTextDocument({
-					content: markdownContent,
-					language: 'markdown'
-				});
+				const uri = vscode.Uri.parse(`myo:/adr/draft-${Date.now()}.md`);
+				virtualDocProvider.setDocumentContent(uri, markdownContent);
+				const doc = await vscode.workspace.openTextDocument(uri);
 				await vscode.window.showTextDocument(doc);
 			} catch (err: any) {
 				vscode.window.showErrorMessage(`Failed to draft ADR: ${err.message}`);
@@ -391,18 +470,33 @@ ${result}
 				return lenses;
 			}
 
-			// Case 2: If it's a user story document, show push backlog button at the top
-			const stories = parseLeanUserStoriesFromMarkdown(content);
+			// Case 2: If it's a user story document, show push story buttons for each individual story
+			const cleanedContent = content.replace(/\[\+\]\(command:myo\.pushSingleStoryToBacklog\?[^)]+\)/g, '');
+			const stories = parseLeanUserStoriesFromMarkdown(cleanedContent);
+			
 			if (stories.length > 0) {
-				const range = new vscode.Range(0, 0, 0, 0);
-				return [
-					new vscode.CodeLens(range, {
-						title: `⚡ Push ${stories.length} User Stories to GitHub Backlog`,
-						command: 'myo.pushStoriesToBacklog'
-					})
-				];
+				for (let i = 0; i < lines.length; i++) {
+					const line = lines[i].trim();
+					if (line.toLowerCase().startsWith('as a ') || line.toLowerCase().startsWith('as an ')) {
+						const matchingStory = stories.find(s => {
+							return line.includes(s.role) && 
+								   (lines[i+1]?.includes(s.action) || lines[i]?.includes(s.action));
+						});
+						
+						if (matchingStory) {
+							const range = new vscode.Range(i, 0, i, 0);
+							lenses.push(
+								new vscode.CodeLens(range, {
+									title: `➕ Push Story to Backlog`,
+									command: 'myo.pushSingleStoryToBacklog',
+									arguments: [matchingStory]
+								})
+							);
+						}
+					}
+				}
 			}
-			return [];
+			return lenses;
 		}
 	}
 
@@ -416,17 +510,24 @@ ${result}
 		new UserStoriesCodeLensProvider()
 	);
 
+	const myoCodeLensProvider = vscode.languages.registerCodeLensProvider(
+		{ language: 'markdown', scheme: 'myo' },
+		new UserStoriesCodeLensProvider()
+	);
+
 	context.subscriptions.push(
 		helloDisposable,
 		githubAuthenticateDisposable,
 		userStoriesDisposable,
 		pushStoriesDisposable,
+		pushSingleStoryDisposable,
 		fetchIceboxDisposable,
 		adrDisposable,
 		c4Disposable,
 
 		fileCodeLensProvider,
-		untitledCodeLensProvider
+		untitledCodeLensProvider,
+		myoCodeLensProvider
 	);
 }
 

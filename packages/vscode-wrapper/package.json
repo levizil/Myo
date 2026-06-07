@@ -37,13 +37,27 @@
       },
       {
         "command": "myo.pushStoriesToBacklog",
-        "title": "Myo: Push User Stories to GitHub Backlog"
+        "title": "Push Stories to Backlog",
+        "icon": "$(cloud-upload)"
       },
       {
         "command": "myo.fetchIcebox",
         "title": "Myo: Fetch GitHub Icebox Items"
+      },
+      {
+        "command": "myo.pushSingleStoryToBacklog",
+        "title": "Myo: Push Single Story to Backlog"
       }
     ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "myo.pushStoriesToBacklog",
+          "when": "resourceScheme == myo",
+          "group": "navigation"
+        }
+      ]
+    },
     "configuration": {
       "title": "Myo",
       "properties": {
