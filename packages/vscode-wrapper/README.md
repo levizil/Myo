@@ -1,71 +1,73 @@
-# vscode-wrapper README
+# Myo: Local AI Developer Companion
 
-This is the README for your extension "vscode-wrapper". After writing up a brief description, we recommend including the following sections.
+Myo is a lightweight, local-first developer companion for Visual Studio Code. Powered by **Ollama** and local LLMs (such as `llama3.1:8b`), Myo helps you streamline your software design process by generating lean user stories, drafting Architectural Decision Records (ADRs) directly from your code, and automatically visualizing your workspace architecture with C4 system context diagrams.
 
-## Features
-
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
-
-For example if there is an image subfolder under your extension project workspace:
-
-\!\[feature X\]\(images/feature-x.png\)
-
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
-
-## Requirements
-
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
-
-## Extension Settings
-
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
-
-For example:
-
-This extension contributes the following settings:
-
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
-
-## Known Issues
-
-Calling out known issues can help limit users opening duplicate issues against your extension.
-
-## Release Notes
-
-Users appreciate release notes as you update your extension.
-
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
+Built with a modular monorepo structure, Myo separates core orchestration logic from VS Code specific APIs, guaranteeing strict isolation and enabling reliable execution.
 
 ---
 
-## Following extension guidelines
+## ⚡ Features
 
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
+### 1. Lean User Story Generator
+Turn rough, unstructured feature ideas into clean, actionable, and industry-standard user stories.
+- **How it works:** Run the command, type your rough idea (e.g. *"A dark mode toggle in the settings menu"*), and get a clean list of stories formatted as:
+  ```markdown
+  As a [user role],
+  I want to [action/goal],
+  So that [benefit/value]
+  ```
 
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
+### 2. Guarded ADR Drafter (Architectural Decision Records)
+Draft structured ADRs based on highlighted code blocks or custom instructions.
+- **How it works:** Highlight a section of code or press the command to document a technical choice.
+- **Resilience:** Built using **Application-Layer Guardrails (Zod validation)**. If the LLM generates preambles, conversational filler, or formatting noise, the parser isolates and enforces the schema structure, failing gracefully or falling back without crashing.
+- **Output:** Automatically creates a markdown document formatted with:
+  - Title, Date, and Status
+  - Decision Context
+  - Selected Decision
+  - Positive Consequences & Trade-offs (Negative Consequences)
 
-## Working with Markdown
+### 3. C4 System Context Diagrams via Mermaid.js
+Scan your workspace structure and analyze dependencies to construct a high-level system boundary diagram.
+- **How it works:** Scans `package.json` manifests and folders to build a prompt representing the workspace context.
+- **Visualization:** Resolves relationships and constructs custom-styled **Mermaid.js** flowchart diagrams (class-defined actors, systems, and databases/APIs) renderable directly in VS Code's Markdown Preview.
 
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
+### 4. Just-In-Time (JIT) Swapping & Zero Keep-Alive
+Designed to run efficiently on consumer-grade hardware.
+- **Resource Management:** Automatically checks Ollama's active models. If another model is active, it unloads it to clear space.
+- **Memory Flushing:** Utilizes a strict "Zero Keep-Alive" policy (`"keep_alive": 0`), forcing Ollama to unload the model from VRAM/RAM immediately after token generation finishes. This prevents system thrashing or Out-Of-Memory (OOM) failures when switching between specialized models.
 
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
+---
 
-## For more information
+## ⚙️ Extension Settings
 
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
+Configure the Ollama integration under VS Code Settings or add these properties to your global `settings.json`:
 
-**Enjoy!**
+* `myo.ollama.url`: The base URL of your local Ollama server.
+  - *Default:* `http://localhost:11434`
+* `myo.ollama.model`: The Ollama model to use for chat and generation.
+  - *Default:* `llama3.1:8b` (Recommended models: `llama3.1`, `qwen2.5-coder`)
+
+---
+
+## 🚀 Getting Started
+
+1. **Install and run Ollama** locally. (Visit [ollama.com](https://ollama.com))
+2. **Download your target model** (e.g., Llama 3.1):
+   ```bash
+   ollama pull llama3.1:8b
+   ```
+3. Open a project workspace in VS Code.
+4. Open the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`) and search for **Myo** commands:
+   - `Myo: Generate Lean User Stories`
+   - `Myo: Generate ADR Draft`
+   - `Myo: Generate C4 Diagram`
+
+---
+
+## 🏗️ Architecture
+
+Myo uses native NPM workspaces to enforce decoupling of domain layers:
+- `@myo/core`: A pure TypeScript/Node package handling raw model prompts, regex fenced-content extraction, schema parsing with Zod, and Ollama JIT memory management.
+- `myo-vs-code` (vscode-wrapper): The extension entry point managing command registrations, file workspaces, status notification progress, and new document views.
+

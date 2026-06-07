@@ -25,3 +25,7 @@ Thumbs.db
 
 # ESLint cache
 .eslintcache
+
+# VS Code extension packaging
+myo.vsix
+
