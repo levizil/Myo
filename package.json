@@ -14,7 +14,8 @@
     "compile": "npm run build --workspace=@myo/core && npm run compile --workspace=myo-vs-code",
     "watch": "npm run watch --workspaces --if-present",
     "lint": "eslint packages/core/src packages/vscode-wrapper/src",
-    "test": "npm run test --workspaces --if-present"
+    "test": "npm run test --workspaces --if-present",
+    "deploy": "npm run compile && npm run deploy --workspace=myo-vs-code"
   },
   "repository": {
     "type": "git",
