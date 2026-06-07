@@ -14,8 +14,7 @@
     "compile": "npm run build --workspace=@myo/core && npm run compile --workspace=myo-vs-code",
     "watch": "npm run watch --workspaces --if-present",
     "lint": "eslint packages/core/src packages/vscode-wrapper/src",
-    "test": "npm run test --workspaces --if-present",
-    "dogfood": "cd packages/vscode-wrapper && npx @vscode/vsce package --out myo.vsix --no-dependencies && \"C:\\Users\\leviz\\AppData\\Local\\Programs\\Antigravity IDE\\Antigravity IDE.exe\" --install-extension myo.vsix --force"
+    "test": "npm run test --workspaces --if-present"
   },
   "repository": {
     "type": "git",

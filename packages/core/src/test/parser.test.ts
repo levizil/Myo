@@ -118,16 +118,16 @@ Here is the diagram data:
 \`\`\`
 `;
 			const mermaid = parseC4ContextJsonAndBuildMermaid(text);
-			
+
 			// Should be wrapped in mermaid block
 			assert.ok(mermaid.startsWith('```mermaid\n'));
 			assert.ok(mermaid.endsWith('\n```'));
-			
+
 			// Check node definitions
 			assert.ok(mermaid.includes('A1["Users"]:::person'));
 			assert.ok(mermaid.includes('A2["Calculator System"]:::component'));
 			assert.ok(mermaid.includes('B1["Database Server"]:::boundary'));
-			
+
 			// Check relationships
 			assert.ok(mermaid.includes('A1 -->|interact| A2'));
 			assert.ok(mermaid.includes('A2 -->|depends on| B1'));
