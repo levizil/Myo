@@ -21,3 +21,22 @@
 **Negative/Trade-offs:**
 * [Trade-off 1: e.g., Requires an additional Regex parsing step in the orchestrator.]
 * [Trade-off 2: e.g., We must implement Zod validation post-extraction to guarantee schema adherence.]
+
+---
+
+### The ADR Threshold Test
+
+1. **The Reversal Cost Test (Is it a One-Way Door?):**
+If you change your mind about this in three months, will it require rewriting multiple files, changing external APIs, or breaking the user experience?
+* *Example:* Changing from REST to WebSockets is an ADR. Changing the color of a UI button is not.
+
+
+2. **The "Why Did I Do This?" Test (Context Decay):**
+If you look at this code in six months, will the logic seem weird or counter-intuitive without knowing the external constraints?
+* *Example:* "I used regex instead of a JSON parser." To an outsider, that looks like bad coding. But with your context (8B models hallucinate schemas), it’s brilliant engineering. That needs an ADR.
+
+
+3. **The Trade-off Test (Did I reject a perfectly good alternative?):**
+If there were two or three highly viable ways to solve the problem and you explicitly chose one over the others, document it. Hiring managers don't just want to know what you chose; they want to know *what you rejected and why*.
+4. **The Cross-Boundary Test (Does it affect other systems?):**
+Does this decision dictate how `@myo/core` and `@myo/vscode` interact? Does it impact the user's host machine (like CPU/RAM usage)?
