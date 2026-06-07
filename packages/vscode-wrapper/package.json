@@ -22,6 +22,10 @@
       {
         "command": "myo.generateUserStories",
         "title": "Myo: Generate Lean User Stories"
+      },
+      {
+        "command": "myo.generateADR",
+        "title": "Myo: Generate ADR Draft"
       }
     ],
     "configuration": {
