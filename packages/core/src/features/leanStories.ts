@@ -1,10 +1,14 @@
 import { unloadOllamaModel } from '../clients/ollama';
 import { extractJsonFromMarkdown } from '../utils/markdown';
 import { UserStoryData, UserStoriesSchema } from '../schemas/userStory';
+import { GitHubClient } from '../clients/github';
 
 export interface LeanUserStoriesOptions {
 	baseUrl?: string;
 	model?: string;
+	githubToken?: string;
+	githubOwner?: string;
+	githubProjectNumber?: number;
 }
 
 /**
@@ -37,11 +41,30 @@ export function parseLeanUserStories(text: string): string {
 }
 
 /**
+ * Parses user stories from markdown text back into structured objects.
+ */
+export function parseLeanUserStoriesFromMarkdown(content: string): UserStoryData[] {
+	const regex = /As an?\s+(.+?)(?:,|\s*)\n\s*I want to\s+(.+?)(?:,|\s*)\n\s*So that\s+(.+?)(?=\r?\n\s*\r?\n|\s*$|\s*As an?\s)/gi;
+	const stories: UserStoryData[] = [];
+	let match;
+	regex.lastIndex = 0;
+	while ((match = regex.exec(content)) !== null) {
+		const role = match[1].trim();
+		const action = match[2].trim();
+		const value = match[3].trim();
+		if (role && action && value) {
+			stories.push({ role, action, value });
+		}
+	}
+	return stories;
+}
+
+/**
  * Sends a feature idea to local Ollama API to generate formatted Lean user stories.
  * Enforces JIT memory management by checking running models and unloading conflicts,
  * and applying a zero-keep-alive policy.
  * @param featureIdea Rough description of the feature
- * @param options Host configurations (baseUrl and model)
+ * @param options Host configurations (baseUrl and model) and GitHub integration parameters
  * @returns Generated markdown content containing user stories
  */
 export async function generateLeanUserStories(
@@ -72,6 +95,23 @@ export async function generateLeanUserStories(
 		console.warn('JIT Memory Manager: Failed to query loaded models:', psError.message);
 	}
 
+	// Fetch Icebox context if configured
+	let iceboxPrompt = '';
+	if (options?.githubToken && options?.githubOwner && options?.githubProjectNumber !== undefined) {
+		try {
+			const client = new GitHubClient(options.githubToken);
+			const items = await client.fetchIceboxItems(options.githubOwner, options.githubProjectNumber);
+			if (items.length > 0) {
+				iceboxPrompt = `\n\nHere are existing items from the Icebox column of our project board:
+${items.map(item => `- Title: ${item.title}\n  Description: ${item.body}`).join('\n')}
+
+Use these existing items as context to avoid duplicates, build upon existing ideas, or maintain consistency.`;
+			}
+		} catch (githubError: any) {
+			console.warn('Failed to fetch Icebox items for context:', githubError.message);
+		}
+	}
+
 	const systemPrompt = `You are a professional product manager assistant. Convert the given rough feature idea into properly formatted Lean user stories.
 You must output ONLY a standard JSON array inside standard triple-backtick Markdown fences (eg: \`\`\`json [ ... ] \`\`\`).
 No preambles, no introductions, no explanations, no text before or after the JSON fences.
@@ -81,7 +121,7 @@ Each object in the JSON array must strictly follow this schema:
 	"role": "the role/user type",
 	"action": "the action/goal",
 	"value": "the benefit/value"
-}`;
+}${iceboxPrompt}`;
 
 	const response = await fetch(`${baseUrl}/api/chat`, {
 		method: 'POST',

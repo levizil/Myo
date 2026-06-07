@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import * as path from 'path';
-import { extractJsonFromMarkdown, AdrSchema, scanWorkspaceDir, parseC4ContextJsonAndBuildMermaid, parseLeanUserStories } from '../index';
+import { extractJsonFromMarkdown, AdrSchema, scanWorkspaceDir, parseC4ContextJsonAndBuildMermaid, parseLeanUserStories, parseLeanUserStoriesFromMarkdown } from '../index';
 
 suite('Core Parsing & Validation Tests', () => {
 	suite('extractJsonFromMarkdown', () => {
@@ -241,6 +241,49 @@ Hope this helps!
 			].join('\n');
 
 			assert.strictEqual(result, expected);
+		});
+	});
+
+	suite('parseLeanUserStoriesFromMarkdown', () => {
+		test('Successfully parses standard markdown formatted user stories', () => {
+			const input = `
+# Generated Stories
+
+As a developer,
+I want to run automated tests,
+So that ensure the system functions correctly
+
+As a product manager,
+I want to view story drafts,
+So that refine feature requirements
+			`;
+
+			const stories = parseLeanUserStoriesFromMarkdown(input);
+
+			assert.strictEqual(stories.length, 2);
+			assert.deepStrictEqual(stories[0], {
+				role: 'developer',
+				action: 'run automated tests',
+				value: 'ensure the system functions correctly'
+			});
+			assert.deepStrictEqual(stories[1], {
+				role: 'product manager',
+				action: 'view story drafts',
+				value: 'refine feature requirements'
+			});
+		});
+
+		test('Handles different line endings and whitespaces', () => {
+			const input = 'As a user\r\nI want to log in\r\nSo that I can see my profile\r\n\r\nAs an admin\nI want to ban users\nSo that keep board clean';
+			const stories = parseLeanUserStoriesFromMarkdown(input);
+
+			assert.strictEqual(stories.length, 2);
+			assert.strictEqual(stories[0].role, 'user');
+			assert.strictEqual(stories[0].action, 'log in');
+			assert.strictEqual(stories[0].value, 'I can see my profile');
+			assert.strictEqual(stories[1].role, 'admin');
+			assert.strictEqual(stories[1].action, 'ban users');
+			assert.strictEqual(stories[1].value, 'keep board clean');
 		});
 	});
 });

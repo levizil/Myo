@@ -1,5 +1,11 @@
 import * as vscode from 'vscode';
-import { generateLeanUserStories, generateAdrFromCode, generateSystemContextDiagram } from '@myo/core';
+import {
+	generateLeanUserStories,
+	generateAdrFromCode,
+	generateSystemContextDiagram,
+	GitHubClient,
+	parseLeanUserStoriesFromMarkdown
+} from '@myo/core';
 
 export function activate(context: vscode.ExtensionContext) {
 	console.log('Congratulations, your extension "myo-vs-code" is now active!');
@@ -8,20 +14,61 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.window.showInformationMessage('Hello World from Myo!');
 	});
 
-	const userStoriesDisposable = vscode.commands.registerCommand('myo.generateUserStories', async () => {
-		const input = await vscode.window.showInputBox({
-			prompt: 'Describe your rough feature idea',
-			placeHolder: 'e.g., A dark mode toggle in the settings menu',
-			ignoreFocusOut: true
-		});
+	const githubAuthenticateDisposable = vscode.commands.registerCommand('myo.githubAuthenticate', async () => {
+		try {
+			const session = await vscode.authentication.getSession('github', ['project', 'repo'], { createIfNone: true });
+			if (session) {
+				vscode.window.showInformationMessage(`Successfully authenticated as ${session.account.label}`);
+			} else {
+				vscode.window.showWarningMessage('Authentication failed or was cancelled.');
+			}
+		} catch (err: any) {
+			vscode.window.showErrorMessage(`GitHub authentication error: ${err.message}`);
+		}
+	});
+
+	const userStoriesDisposable = vscode.commands.registerCommand('myo.generateUserStories', async (prefilledInput?: string) => {
+		let input = prefilledInput;
+		if (!input) {
+			const editor = vscode.window.activeTextEditor;
+			let selectedText = '';
+			if (editor) {
+				const selection = editor.selection;
+				selectedText = editor.document.getText(selection).trim();
+			}
+
+			input = await vscode.window.showInputBox({
+				prompt: 'Describe your rough feature idea',
+				value: selectedText,
+				placeHolder: 'e.g., A dark mode toggle in the settings menu',
+				ignoreFocusOut: true
+			});
+		}
 
 		if (!input || !input.trim()) {
 			return;
 		}
 
-		const config = vscode.workspace.getConfiguration('myo.ollama');
-		const baseUrl = config.get<string>('url') || 'http://localhost:11434';
-		const model = config.get<string>('model') || 'llama3.1:8b';
+		const ollamaConfig = vscode.workspace.getConfiguration('myo.ollama');
+		const baseUrl = ollamaConfig.get<string>('url') || 'http://localhost:11434';
+		const model = ollamaConfig.get<string>('model') || 'llama3.1:8b';
+
+		const githubConfig = vscode.workspace.getConfiguration('myo.github');
+		const githubOwner = githubConfig.get<string>('owner') || '';
+		const githubProjectNumber = githubConfig.get<number>('projectNumber') || 1;
+
+		let githubToken: string | undefined;
+
+		if (githubOwner) {
+			try {
+				const session = await vscode.authentication.getSession('github', ['project', 'repo'], { createIfNone: true });
+				if (session) {
+					githubToken = session.accessToken;
+				}
+			} catch (err: any) {
+				vscode.window.showWarningMessage(`GitHub authentication failed, generating user stories without Icebox context: ${err.message}`);
+			}
+		}
 
 		await vscode.window.withProgress({
 			location: vscode.ProgressLocation.Notification,
@@ -29,7 +76,13 @@ export function activate(context: vscode.ExtensionContext) {
 			cancellable: false
 		}, async () => {
 			try {
-				const result = await generateLeanUserStories(input, { baseUrl, model });
+				const result = await generateLeanUserStories(input, {
+					baseUrl,
+					model,
+					githubToken,
+					githubOwner: githubOwner || undefined,
+					githubProjectNumber
+				});
 				
 				const doc = await vscode.workspace.openTextDocument({
 					content: result,
@@ -38,6 +91,147 @@ export function activate(context: vscode.ExtensionContext) {
 				await vscode.window.showTextDocument(doc);
 			} catch (err: any) {
 				vscode.window.showErrorMessage(`Failed to generate user stories: ${err.message}`);
+			}
+		});
+	});
+
+	const pushStoriesDisposable = vscode.commands.registerCommand('myo.pushStoriesToBacklog', async () => {
+		const githubConfig = vscode.workspace.getConfiguration('myo.github');
+		const owner = githubConfig.get<string>('owner') || '';
+		const projectNumber = githubConfig.get<number>('projectNumber') || 1;
+
+		if (!owner) {
+			vscode.window.showWarningMessage('GitHub owner is not configured in VS Code settings. Please set "myo.github.owner".');
+			return;
+		}
+
+		const editor = vscode.window.activeTextEditor;
+		if (!editor) {
+			vscode.window.showWarningMessage('No active Markdown file with user stories.');
+			return;
+		}
+
+		const content = editor.document.getText();
+		const stories = parseLeanUserStoriesFromMarkdown(content);
+
+		if (stories.length === 0) {
+			vscode.window.showWarningMessage('Could not find any user stories in the current file matching: "As a ..., I want to ..., So that ...".');
+			return;
+		}
+
+		// Prompt user with multi-select QuickPick
+		const quickPickItems = stories.map(story => ({
+			label: `As a ${story.role}, I want to ${story.action}`,
+			description: `So that ${story.value}`,
+			picked: true,
+			story
+		}));
+
+		const selectedItems = await vscode.window.showQuickPick(quickPickItems, {
+			canPickMany: true,
+			title: 'Select user stories to push to GitHub Backlog'
+		});
+
+		if (!selectedItems || selectedItems.length === 0) {
+			return; // cancelled or none selected
+		}
+
+		// Authenticate and get token
+		let githubToken: string | undefined;
+		try {
+			const session = await vscode.authentication.getSession('github', ['project', 'repo'], { createIfNone: true });
+			if (session) {
+				githubToken = session.accessToken;
+			}
+		} catch (err: any) {
+			vscode.window.showErrorMessage(`GitHub authentication is required to push to backlog: ${err.message}`);
+			return;
+		}
+
+		if (!githubToken) {
+			vscode.window.showErrorMessage('GitHub authentication token is required.');
+			return;
+		}
+
+		const client = new GitHubClient(githubToken);
+
+		await vscode.window.withProgress({
+			location: vscode.ProgressLocation.Notification,
+			title: 'Pushing user stories to Backlog...',
+			cancellable: false
+		}, async (progress) => {
+			let count = 0;
+			for (const item of selectedItems) {
+				const title = item.label;
+				const body = `${item.label}\n${item.description}`;
+				progress.report({ message: `Story ${++count} of ${selectedItems.length}: "${item.story.action}"` });
+
+				try {
+					await client.addStoryToBacklog(owner, projectNumber, title, body);
+				} catch (err: any) {
+					vscode.window.showErrorMessage(`Failed to push story "${item.story.action}": ${err.message}`);
+				}
+			}
+		});
+
+		vscode.window.showInformationMessage(`Successfully pushed ${selectedItems.length} stories to the Backlog!`);
+	});
+
+	const fetchIceboxDisposable = vscode.commands.registerCommand('myo.fetchIcebox', async () => {
+		const githubConfig = vscode.workspace.getConfiguration('myo.github');
+		const owner = githubConfig.get<string>('owner') || '';
+		const projectNumber = githubConfig.get<number>('projectNumber') || 1;
+
+		if (!owner) {
+			vscode.window.showWarningMessage('GitHub owner is not configured in VS Code settings. Please set "myo.github.owner".');
+			return;
+		}
+
+		// Authenticate and get token
+		let githubToken: string | undefined;
+		try {
+			const session = await vscode.authentication.getSession('github', ['project', 'repo'], { createIfNone: true });
+			if (session) {
+				githubToken = session.accessToken;
+			}
+		} catch (err: any) {
+			vscode.window.showErrorMessage(`GitHub authentication is required to fetch Icebox items: ${err.message}`);
+			return;
+		}
+
+		if (!githubToken) {
+			vscode.window.showErrorMessage('GitHub authentication token is required.');
+			return;
+		}
+
+		const client = new GitHubClient(githubToken);
+
+		await vscode.window.withProgress({
+			location: vscode.ProgressLocation.Notification,
+			title: `Fetching Icebox items from project #${projectNumber}...`,
+			cancellable: false
+		}, async () => {
+			try {
+				const items = await client.fetchIceboxItems(owner, projectNumber);
+				if (items.length === 0) {
+					vscode.window.showInformationMessage('No items found in the Icebox column.');
+					return;
+				}
+
+				const markdownContent = `# GitHub Icebox Items (Project #${projectNumber} under "${owner}")
+ 
+Here are the current items in the "Icebox" column of your Project board:
+ 
+${items.map(item => `## ${item.title}\n\n${item.body}`).join('\n\n')}
+`;
+
+				const doc = await vscode.workspace.openTextDocument({
+					content: markdownContent,
+					language: 'markdown'
+				});
+				await vscode.window.showTextDocument(doc);
+			} catch (err: any) {
+				vscode.window.showErrorMessage(`Failed to fetch Icebox items: ${err.message}`);
 			}
 		});
 	});
@@ -73,9 +267,9 @@ export function activate(context: vscode.ExtensionContext) {
 			return;
 		}
 
-		const config = vscode.workspace.getConfiguration('myo.ollama');
-		const baseUrl = config.get<string>('url') || 'http://localhost:11434';
-		const model = config.get<string>('model') || 'llama3.1:8b';
+		const ollamaConfig = vscode.workspace.getConfiguration('myo.ollama');
+		const baseUrl = ollamaConfig.get<string>('url') || 'http://localhost:11434';
+		const model = ollamaConfig.get<string>('model') || 'llama3.1:8b';
 
 		const progressTitle = selectedText && selectedText.trim()
 			? 'Drafting ADR from highlighted code...'
@@ -92,21 +286,21 @@ export function activate(context: vscode.ExtensionContext) {
 				const today = new Date().toISOString().split('T')[0];
 				
 				const markdownContent = `# ADR: ${adrData.title}
-
+ 
 **Date:** ${today}  
 **Status:** Proposed  
-
+ 
 ## Context
 ${adrData.context}
-
+ 
 ## Decision
 ${adrData.decision}
-
+ 
 ## Consequences
-
+ 
 **Positive:**
 ${adrData.consequences.positive.map(p => `* ${p}`).join('\n')}
-
+ 
 **Negative/Trade-offs:**
 ${adrData.consequences.negative.map(n => `* ${n}`).join('\n')}
 `;
@@ -131,9 +325,9 @@ ${adrData.consequences.negative.map(n => `* ${n}`).join('\n')}
 
 		const rootPath = workspaceFolders[0].uri.fsPath;
 
-		const config = vscode.workspace.getConfiguration('myo.ollama');
-		const baseUrl = config.get<string>('url') || 'http://localhost:11434';
-		const model = config.get<string>('model') || 'llama3.1:8b';
+		const ollamaConfig = vscode.workspace.getConfiguration('myo.ollama');
+		const baseUrl = ollamaConfig.get<string>('url') || 'http://localhost:11434';
+		const model = ollamaConfig.get<string>('model') || 'llama3.1:8b';
 
 		await vscode.window.withProgress({
 			location: vscode.ProgressLocation.Notification,
@@ -144,9 +338,9 @@ ${adrData.consequences.negative.map(n => `* ${n}`).join('\n')}
 				const result = await generateSystemContextDiagram(rootPath, { baseUrl, model });
 				
 				const markdownContent = `# C4 System Context Diagram
-
+ 
 Here is the system context diagram for your workspace generated by Myo. Open the VS Code Markdown Preview (press \`Ctrl+K V\` or \`Cmd+K V\`) to see the diagram render.
-
+ 
 ${result}
 `;
 
@@ -161,7 +355,79 @@ ${result}
 		});
 	});
 
-	context.subscriptions.push(helloDisposable, userStoriesDisposable, adrDisposable, c4Disposable);
+	class UserStoriesCodeLensProvider implements vscode.CodeLensProvider {
+		provideCodeLenses(
+			document: vscode.TextDocument,
+			token: vscode.CancellationToken
+		): vscode.ProviderResult<vscode.CodeLens[]> {
+			const content = document.getText();
+
+			// Case 1: If it's a fetched Icebox items doc, show generate buttons above headers
+			const lines = content.split(/\r?\n/);
+			const lenses: vscode.CodeLens[] = [];
+			let isIceboxDoc = false;
+
+			for (let i = 0; i < lines.length; i++) {
+				const line = lines[i].trim();
+				if (line.startsWith('# GitHub Icebox Items')) {
+					isIceboxDoc = true;
+				}
+				if (isIceboxDoc && line.startsWith('## ')) {
+					const title = line.substring(3).trim();
+					if (title) {
+						const range = new vscode.Range(i, 0, i, 0);
+						lenses.push(
+							new vscode.CodeLens(range, {
+								title: `✨ Generate Lean User Stories`,
+								command: 'myo.generateUserStories',
+								arguments: [title]
+							})
+						);
+					}
+				}
+			}
+
+			if (isIceboxDoc && lenses.length > 0) {
+				return lenses;
+			}
+
+			// Case 2: If it's a user story document, show push backlog button at the top
+			const stories = parseLeanUserStoriesFromMarkdown(content);
+			if (stories.length > 0) {
+				const range = new vscode.Range(0, 0, 0, 0);
+				return [
+					new vscode.CodeLens(range, {
+						title: `⚡ Push ${stories.length} User Stories to GitHub Backlog`,
+						command: 'myo.pushStoriesToBacklog'
+					})
+				];
+			}
+			return [];
+		}
+	}
+
+	const fileCodeLensProvider = vscode.languages.registerCodeLensProvider(
+		{ language: 'markdown', scheme: 'file' },
+		new UserStoriesCodeLensProvider()
+	);
+
+	const untitledCodeLensProvider = vscode.languages.registerCodeLensProvider(
+		{ language: 'markdown', scheme: 'untitled' },
+		new UserStoriesCodeLensProvider()
+	);
+
+	context.subscriptions.push(
+		helloDisposable,
+		githubAuthenticateDisposable,
+		userStoriesDisposable,
+		pushStoriesDisposable,
+		fetchIceboxDisposable,
+		adrDisposable,
+		c4Disposable,
+
+		fileCodeLensProvider,
+		untitledCodeLensProvider
+	);
 }
 
 export function deactivate() {}

@@ -30,10 +30,22 @@
       {
         "command": "myo.generateC4Diagram",
         "title": "Myo: Generate C4 Diagram"
+      },
+      {
+        "command": "myo.githubAuthenticate",
+        "title": "Myo: Authenticate with GitHub"
+      },
+      {
+        "command": "myo.pushStoriesToBacklog",
+        "title": "Myo: Push User Stories to GitHub Backlog"
+      },
+      {
+        "command": "myo.fetchIcebox",
+        "title": "Myo: Fetch GitHub Icebox Items"
       }
     ],
     "configuration": {
-      "title": "Myo (Ollama)",
+      "title": "Myo",
       "properties": {
         "myo.ollama.url": {
           "type": "string",
@@ -44,6 +56,16 @@
           "type": "string",
           "default": "llama3.1:8b",
           "description": "The Ollama model to use for chat and generation."
+        },
+        "myo.github.owner": {
+          "type": "string",
+          "default": "",
+          "description": "GitHub username or organization owning the Project v2 board."
+        },
+        "myo.github.projectNumber": {
+          "type": "integer",
+          "default": 1,
+          "description": "The number of the GitHub Project v2 board (e.g., 1)."
         }
       }
     }

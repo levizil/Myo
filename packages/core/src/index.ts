@@ -8,3 +8,4 @@ export * from './utils/mermaid';
 export * from './features/adrGenerator';
 export * from './features/contextDiagram';
 export * from './features/leanStories';
+export * from './clients/github';
