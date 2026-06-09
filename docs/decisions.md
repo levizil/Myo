@@ -45,8 +45,6 @@ We will utilize a monorepo structure managed by native NPM Workspaces. The proje
 
 ---
 
----
-
 # ADR 003: Structure Inversion via Application-Layer Guardrails
 
 **Date:** 2026-06-06  
@@ -75,8 +73,6 @@ The application layer will dictate whether the data structure is sound; the mode
 
 ---
 
----
-
 # ADR 004: Just-In-Time (JIT) Model Swapping and Zero Keep-Alive
 
 **Date:** 2026-06-06  
@@ -97,3 +93,85 @@ The `@myo/core` orchestrator will act as a Just-In-Time (JIT) memory manager, ut
 **Negative/Trade-offs:**
 * **Handoff Latency:** Introduces unavoidable "Cold Start" delays (5-15 seconds) *during* the execution pipeline while the system swaps models from disk to memory.
 * **UX Impact:** Requires the VS Code UI (`@myo/vscode`) to handle longer, multi-stage loading states gracefully so the user does not assume the extension has frozen during a model swap.
+
+---
+
+Here are the next Architecture Decision Records (ADRs 005–007) based on the structural, storage, and orchestration strategies we established for the Myo project. They follow your exact template format and threshold logic.
+
+# ADR 005: AST Skeleton Extraction (B.O.N.E.S.) for LLM Context
+
+**Date:** 2026-06-08
+**Status:** Proposed
+
+## Context
+
+Feeding raw, multi-file source code to an 8B parameter model rapidly consumes its context window, leading to "context collapse" where the model forgets instructions or hallucinates logic. We need a way to provide the model with deep workspace awareness (dependencies, interfaces, neighbors) without the crippling token bloat of raw implementation details.
+
+## Decision
+
+We will use `tree-sitter` to parse the Abstract Syntax Tree (AST) of workspace files and extract purely structural skeletons (B.O.N.E.S.). Before passing context to the LLM, the `@myo/core` engine will elide all internal function block logic, retaining only exports, function signatures, types, and docstrings.
+
+## Consequences
+
+**Positive:**
+
+* Dramatically reduces token payload, maximizing the 8B model's attention span for the actual execution logic.
+* Offloads the heavy lifting of workspace routing from the probabilistic LLM to deterministic tooling.
+
+**Negative/Trade-offs:**
+
+* Requires shipping and managing `tree-sitter` WebAssembly bindings within the Antigravity IDE environment.
+* The model operates completely blind to the internal logic of sibling functions, requiring docstrings or descriptive signatures to be well-maintained by the developer.
+
+---
+
+# ADR 006: In-Memory Semantic Indexing via Local Vectors (L.I.T.E.)
+
+**Date:** 2026-06-08
+**Status:** Proposed
+
+## Context
+
+Attempting to use an 8B LLM to sequentially evaluate files for semantic relevance ("LLM-in-the-loop" search) causes unacceptable latency and single-threaded compute bottlenecks. We need a way to instantly find semantically relevant functions across the workspace without spinning up external database servers or exceeding the 8GB VRAM ceiling.
+
+## Decision
+
+We will implement an embedded Retrieval-Augmented Generation (RAG) pipeline utilizing LanceDB and `@xenova/transformers.js`. The extension will use a tiny, CPU-bound quantized model to translate AST skeletons into vector embeddings. These vectors will be persisted locally to a hidden `.myo/vector_store` directory at the workspace root, which is automatically appended to the user's `.gitignore`.
+
+## Consequences
+
+**Positive:**
+
+* Achieves lightning-fast semantic search (milliseconds) without consuming any VRAM or conflicting with Ollama's model footprint.
+* Serverless architecture perfectly respects the local-first, zero-configuration philosophy of the extension.
+
+**Negative/Trade-offs:**
+
+* Adds native Node.js dependencies (`vectordb`, Wasm models) which require careful build-step configuration to bundle correctly within the monorepo architecture.
+* Occupies a small amount of disk space in the user's local project directory.
+
+---
+
+# ADR 007: Event-Driven Vector Cache Invalidation (E.C.H.O.)
+
+**Date:** 2026-06-08
+**Status:** Proposed
+
+## Context
+
+As the user develops, the local vector database will quickly become stale, pointing the LLM toward outdated AST skeletons or deleted functions. Polling the entire workspace filesystem to rebuild the index is computationally wasteful and creates unresponsive UI experiences.
+
+## Decision
+
+We will strictly hook into the extension host's native file lifecycle events (`vscode.workspace.onDidSaveTextDocument`) to manage cache invalidation. Upon save, the extension will parse only the modified file, generate new embeddings, and perform a direct database Upsert or Delete using a deterministic string hash (`filePath::symbolName`) as the primary key. Implementation note: the event listener lives strictly in @myo/vscode package and delegates to a generic API in @my/core
+
+## Consequences
+
+**Positive:**
+
+* Guarantees the semantic vector index remains perfectly synchronized with the workspace state with zero manual intervention or background polling.
+* CPU cost is amortized across natural file-save events rather than batched in massive indexing sweeps.
+
+**Negative/Trade-offs:**
+
+* Requires strict adherence to deterministic ID generation; a bug in the hashing logic will result in orphaned or duplicated vectors silently polluting the LanceDB tables.

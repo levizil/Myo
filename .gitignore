@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
 /packages/*/node_modules/
+CLAUDE.md
 
 # Production/Build outputs
 out/
@@ -29,3 +30,5 @@ Thumbs.db
 # VS Code extension packaging
 myo.vsix
 
+# scratch space
+plans/
