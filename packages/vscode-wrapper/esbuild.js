@@ -57,7 +57,16 @@ async function main() {
 		sourcesContent: false,
 		platform: 'node',
 		outfile: 'dist/extension.js',
-		external: ['vscode'],
+		// 'vscode' is always external (provided by the extension host).
+		// Native addon packages cannot be bundled by esbuild — keep them as
+		// require() calls resolved from node_modules at runtime.
+		external: [
+			'vscode',
+			'@lancedb/lancedb',
+			'@xenova/transformers',
+			'onnxruntime-node',
+			'sharp',
+		],
 		logLevel: 'silent',
 		plugins: [
 			copyWasmPlugin,

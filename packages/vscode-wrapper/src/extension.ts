@@ -7,7 +7,8 @@ import {
 	GitHubClient,
 	parseLeanUserStoriesFromMarkdown,
 	initializeSkeletonParser,
-	extractSkeleton
+	extractSkeleton,
+	initializeWorkspace
 } from '@myo/core';
 
 class MyoVirtualDocumentProvider implements vscode.TextDocumentContentProvider {
@@ -35,6 +36,13 @@ export function activate(context: vscode.ExtensionContext) {
 	).catch((err: Error) => {
 		console.error('[Myo] B.O.N.E.S. parser failed to initialize:', err.message);
 	});
+
+	const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+	if (workspacePath) {
+		initializeWorkspace(workspacePath).catch((err: Error) => {
+			vscode.window.showErrorMessage(`Myo: Failed to initialize vector store — ${err.message}`);
+		});
+	}
 
 	const virtualDocProvider = new MyoVirtualDocumentProvider();
 	const providerRegistration = vscode.workspace.registerTextDocumentContentProvider('myo', virtualDocProvider);

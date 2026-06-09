@@ -10,3 +10,7 @@ export * from './features/contextDiagram';
 export * from './features/leanStories';
 export * from './clients/github';
 export * from './utils/skeleton';
+export { embed } from './clients/embedder';
+export { initVectorStore, upsert, querySimilar, deleteById } from './clients/vectorStore';
+export type { VectorRecord } from './clients/vectorStore';
+export { initializeWorkspace } from './features/workspaceIndex';
