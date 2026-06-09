@@ -51,6 +51,10 @@
       {
         "command": "myo.testParseFile",
         "title": "Myo: Test Parse File"
+      },
+      {
+        "command": "myo.retrieveContext",
+        "title": "Myo: Retrieve Context"
       }
     ],
     "menus": {

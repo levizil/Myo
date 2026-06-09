@@ -14,3 +14,4 @@ export { embed } from './clients/embedder';
 export { initVectorStore, upsert, querySimilar, deleteById, listByFilePath } from './clients/vectorStore';
 export type { VectorRecord } from './clients/vectorStore';
 export { initializeWorkspace, synchronizeFileVector } from './features/workspaceIndex';
+export { retrieveContext, buildContextBlock } from './features/contextRetrieval';

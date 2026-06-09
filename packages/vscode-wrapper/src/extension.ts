@@ -9,7 +9,8 @@ import {
 	initializeSkeletonParser,
 	extractSkeleton,
 	initializeWorkspace,
-	synchronizeFileVector
+	synchronizeFileVector,
+	retrieveContext
 } from '@myo/core';
 
 class MyoVirtualDocumentProvider implements vscode.TextDocumentContentProvider {
@@ -39,10 +40,13 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
 	const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+	let vectorStoreTable: any = null;
 	if (workspacePath) {
-		initializeWorkspace(workspacePath).catch((err: Error) => {
-			vscode.window.showErrorMessage(`Myo: Failed to initialize vector store — ${err.message}`);
-		});
+		initializeWorkspace(workspacePath)
+			.then(table => { vectorStoreTable = table; })
+			.catch((err: Error) => {
+				vscode.window.showErrorMessage(`Myo: Failed to initialize vector store — ${err.message}`);
+			});
 	}
 
 	const ECHO_DEBOUNCE_MS = 300;
@@ -429,6 +433,39 @@ ${adrData.consequences.negative.map(n => `* ${n}`).join('\n')}
 		});
 	});
 
+	const retrieveContextDisposable = vscode.commands.registerCommand('myo.retrieveContext', async () => {
+		if (!vectorStoreTable) {
+			vscode.window.showErrorMessage('Myo: Vector store is not ready yet. Please wait a moment and try again.');
+			return;
+		}
+
+		const query = await vscode.window.showInputBox({
+			prompt: 'Describe what you need (F.I.N.D. will retrieve relevant workspace symbols)',
+			placeHolder: 'e.g., Add data validation for user input',
+			ignoreFocusOut: true
+		});
+
+		if (!query || !query.trim()) {
+			return;
+		}
+
+		await vscode.window.withProgress({
+			location: vscode.ProgressLocation.Notification,
+			title: 'Retrieving workspace context...',
+			cancellable: false
+		}, async () => {
+			try {
+				const contextBlock = await retrieveContext(query, vectorStoreTable, 5, workspacePath);
+				const uri = vscode.Uri.parse(`myo:/context/find-${Date.now()}.md`);
+				virtualDocProvider.setDocumentContent(uri, contextBlock);
+				const doc = await vscode.workspace.openTextDocument(uri);
+				await vscode.window.showTextDocument(doc);
+			} catch (err: any) {
+				vscode.window.showErrorMessage(`F.I.N.D.: ${err.message}`);
+			}
+		});
+	});
+
 	const testParseDisposable = vscode.commands.registerCommand('myo.testParseFile', async () => {
 		const editor = vscode.window.activeTextEditor;
 		if (!editor) {
@@ -578,6 +615,7 @@ ${result}
 		fetchIceboxDisposable,
 		adrDisposable,
 		c4Disposable,
+		retrieveContextDisposable,
 		testParseDisposable,
 
 		fileCodeLensProvider,

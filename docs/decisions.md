@@ -175,3 +175,36 @@ We will strictly hook into the extension host's native file lifecycle events (`v
 **Negative/Trade-offs:**
 
 * Requires strict adherence to deterministic ID generation; a bug in the hashing logic will result in orphaned or duplicated vectors silently polluting the LanceDB tables.
+
+---
+
+# ADR 008: Standardized Context Injection (The N.A.T.I.V.E. Format)
+
+**Date:** 2026-06-08
+
+**Status:** Proposed
+
+## Context
+
+Various features within the orchestrator (e.g., execution RAG, C4 diagramming, user story drafting) must inject dynamic workspace data into the LLM's system prompt. Because we operate under strict hardware limits (8B parameter models, 8GB VRAM), every token matters. Injecting context using verbose, highly nested structures (like deep XML trees, stringified JSON arrays, or double-escaped absolute paths) causes "attention dilution." The model wastes computational overhead parsing syntax rather than reasoning about the code, leading to hallucinations and degraded spatial awareness of the workspace.
+
+## Decision
+
+All prompt builders across the `@myo/core` package will standardize on the N.A.T.I.V.E. (Native Attention & Token-lean Injection via External boundaries) format for data injection:
+
+1. **Single Outer Boundary:** The injected payload must be wrapped in a single, domain-specific XML tag (e.g., `<Workspace_Context>`, `<Manifest_Data>`, `<User_Stories>`) to partition instructions from reference material.
+2. **Flattened Internals:** Internal data must be flattened into standard Markdown. Nested XML tags and programmatic JSON arrays for reference context are strictly forbidden.
+3. **Minimal Viable Context:** All file paths must be reduced to relative workspace paths. File boundaries within the context block must be denoted using native language comments (e.g., `// File: src/utils.ts` or `# File: script.py`) rather than explicit syntax schemas.
+
+## Consequences
+
+**Positive:**
+
+* **Universal Token Economy:** Establishes a universal contract that protects the context window across all current and future orchestrator tools.
+* **Zero-Shot Optimization:** Leverages the LLM's pre-training on standard open-source repositories, where multi-file code sharing naturally relies on inline comments and markdown rather than custom structural schemas.
+* **Predictable Concatenation:** Standardizes how the prompt-building utilities in the core package assemble strings, reducing edge cases where nested markdown breaks the Antigravity IDE webview rendering.
+
+**Negative/Trade-offs:**
+
+* **Preprocessing Overhead:** All prompt builders must explicitly implement path-resolution and data-flattening logic before injecting context, increasing the string-manipulation boilerplate in the core package.
+* **Loss of Granular Metadata:** The flat markdown structure makes it difficult to pass invisible metadata (like vector similarity scores or internal DB IDs) alongside the context without confusing the LLM.
