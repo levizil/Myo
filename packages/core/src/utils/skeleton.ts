@@ -18,6 +18,34 @@ export async function initializeSkeletonParser(
     _parser.setLanguage(tsLanguage);
 }
 
+export interface SkeletonSymbol {
+    name: string;
+    skeleton: string;
+}
+
+export function extractSymbols(code: string): SkeletonSymbol[] {
+    if (!_parser) { return []; }
+
+    const tree = _parser.parse(code);
+    if (!tree) { return []; }
+
+    const symbols: SkeletonSymbol[] = [];
+    const topLevel = tree.rootNode.children;
+
+    for (const node of topLevel) {
+        if (node.type !== 'export_statement') { continue; }
+        const decl = node.namedChildren[0];
+        if (!decl || !keptDeclarationTypes.has(decl.type)) { continue; }
+        const name = decl.childForFieldName('name')?.text;
+        if (!name) { continue; }
+        const skeleton = extractExportSnippet(node, code);
+        if (!skeleton) { continue; }
+        symbols.push({ name, skeleton });
+    }
+
+    return symbols;
+}
+
 export function extractSkeleton(code: string): string {
     if (!_parser) {
         throw new Error('B.O.N.E.S. parser not initialized. Call initializeSkeletonParser() first.');

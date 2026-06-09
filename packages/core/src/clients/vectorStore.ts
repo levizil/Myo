@@ -50,3 +50,12 @@ export async function deleteById(table: lancedb.Table, id: string): Promise<void
   const safeId = id.replace(/'/g, "''");
   await table.delete(`id = '${safeId}'`);
 }
+
+export async function listByFilePath(
+  table: lancedb.Table,
+  filePath: string
+): Promise<VectorRecord[]> {
+  const safeFilePath = filePath.replace(/'/g, "''");
+  const rows = await table.query().where(`filePath = '${safeFilePath}'`).toArray();
+  return rows as unknown as VectorRecord[];
+}

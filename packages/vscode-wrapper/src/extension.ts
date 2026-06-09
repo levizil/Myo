@@ -8,7 +8,8 @@ import {
 	parseLeanUserStoriesFromMarkdown,
 	initializeSkeletonParser,
 	extractSkeleton,
-	initializeWorkspace
+	initializeWorkspace,
+	synchronizeFileVector
 } from '@myo/core';
 
 class MyoVirtualDocumentProvider implements vscode.TextDocumentContentProvider {
@@ -43,6 +44,21 @@ export function activate(context: vscode.ExtensionContext) {
 			vscode.window.showErrorMessage(`Myo: Failed to initialize vector store — ${err.message}`);
 		});
 	}
+
+	const ECHO_DEBOUNCE_MS = 300;
+	let echoDebounceTimer: NodeJS.Timeout | undefined;
+	context.subscriptions.push(
+		vscode.workspace.onDidSaveTextDocument((doc) => {
+			const lang = doc.languageId;
+			if (lang !== 'typescript' && lang !== 'javascript') { return; }
+			clearTimeout(echoDebounceTimer);
+			echoDebounceTimer = setTimeout(() => {
+				synchronizeFileVector(doc.fileName, doc.getText()).catch((err: Error) => {
+					console.error('[Myo] E.C.H.O. sync failed:', err.message);
+				});
+			}, ECHO_DEBOUNCE_MS);
+		})
+	);
 
 	const virtualDocProvider = new MyoVirtualDocumentProvider();
 	const providerRegistration = vscode.workspace.registerTextDocumentContentProvider('myo', virtualDocProvider);
