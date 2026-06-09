@@ -47,6 +47,10 @@
       {
         "command": "myo.pushSingleStoryToBacklog",
         "title": "Myo: Push Single Story to Backlog"
+      },
+      {
+        "command": "myo.testParseFile",
+        "title": "Myo: Test Parse File"
       }
     ],
     "menus": {

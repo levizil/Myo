@@ -1,10 +1,13 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import {
 	generateLeanUserStories,
 	generateAdrFromCode,
 	generateSystemContextDiagram,
 	GitHubClient,
-	parseLeanUserStoriesFromMarkdown
+	parseLeanUserStoriesFromMarkdown,
+	initializeSkeletonParser,
+	extractSkeleton
 } from '@myo/core';
 
 class MyoVirtualDocumentProvider implements vscode.TextDocumentContentProvider {
@@ -25,6 +28,13 @@ class MyoVirtualDocumentProvider implements vscode.TextDocumentContentProvider {
 
 export function activate(context: vscode.ExtensionContext) {
 	console.log('Congratulations, your extension "myo-vs-code" is now active!');
+
+	initializeSkeletonParser(
+		path.join(__dirname),
+		path.join(__dirname, 'tree-sitter-typescript.wasm')
+	).catch((err: Error) => {
+		console.error('[Myo] B.O.N.E.S. parser failed to initialize:', err.message);
+	});
 
 	const virtualDocProvider = new MyoVirtualDocumentProvider();
 	const providerRegistration = vscode.workspace.registerTextDocumentContentProvider('myo', virtualDocProvider);
@@ -395,6 +405,26 @@ ${adrData.consequences.negative.map(n => `* ${n}`).join('\n')}
 		});
 	});
 
+	const testParseDisposable = vscode.commands.registerCommand('myo.testParseFile', async () => {
+		const editor = vscode.window.activeTextEditor;
+		if (!editor) {
+			vscode.window.showWarningMessage('Open a TypeScript file to test B.O.N.E.S. parsing.');
+			return;
+		}
+		let skeleton: string;
+		try {
+			skeleton = extractSkeleton(editor.document.getText());
+		} catch (err: any) {
+			vscode.window.showErrorMessage(`B.O.N.E.S.: ${err.message}`);
+			return;
+		}
+		const ch = vscode.window.createOutputChannel('Myo B.O.N.E.S.');
+		ch.clear();
+		ch.appendLine(`=== Skeleton: ${editor.document.fileName} ===\n`);
+		ch.appendLine(skeleton || '(no exported symbols found)');
+		ch.show(true);
+	});
+
 	const c4Disposable = vscode.commands.registerCommand('myo.generateC4Diagram', async () => {
 		const workspaceFolders = vscode.workspace.workspaceFolders;
 		if (!workspaceFolders || workspaceFolders.length === 0) {
@@ -524,6 +554,7 @@ ${result}
 		fetchIceboxDisposable,
 		adrDisposable,
 		c4Disposable,
+		testParseDisposable,
 
 		fileCodeLensProvider,
 		untitledCodeLensProvider,

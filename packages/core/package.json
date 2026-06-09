@@ -10,12 +10,14 @@
     "test": "mocha -r ts-node/register --ui tdd src/test/**/*.test.ts"
   },
   "devDependencies": {
-    "typescript": "^5.9.3",
-    "mocha": "^10.4.0",
     "@types/mocha": "^10.0.10",
-    "ts-node": "^10.9.2"
+    "mocha": "^10.4.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
   },
   "dependencies": {
+    "tree-sitter-typescript": "^0.23.2",
+    "web-tree-sitter": "^0.26.9",
     "zod": "^3.23.8"
   },
   "keywords": [],

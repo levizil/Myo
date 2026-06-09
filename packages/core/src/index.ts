@@ -9,3 +9,4 @@ export * from './features/adrGenerator';
 export * from './features/contextDiagram';
 export * from './features/leanStories';
 export * from './clients/github';
+export * from './utils/skeleton';

@@ -1,7 +1,29 @@
 const esbuild = require("esbuild");
+const { copyFile, mkdir } = require('fs/promises');
+const path = require('path');
 
 const production = process.argv.includes('--production');
 const watch = process.argv.includes('--watch');
+
+const copyWasmPlugin = {
+	name: 'copy-wasm-files',
+	setup(build) {
+		build.onEnd(async (result) => {
+			if (result.errors.length > 0) { return; }
+			await mkdir(path.join(__dirname, 'dist'), { recursive: true });
+			const webTreeSitterDir = path.dirname(require.resolve('web-tree-sitter'));
+			const tsGrammarDir = path.dirname(require.resolve('tree-sitter-typescript/package.json'));
+			await copyFile(
+				path.join(webTreeSitterDir, 'web-tree-sitter.wasm'),
+				path.join(__dirname, 'dist', 'web-tree-sitter.wasm')
+			);
+			await copyFile(
+				path.join(tsGrammarDir, 'tree-sitter-typescript.wasm'),
+				path.join(__dirname, 'dist', 'tree-sitter-typescript.wasm')
+			);
+		});
+	}
+};
 
 /**
  * @type {import('esbuild').Plugin}
@@ -38,7 +60,7 @@ async function main() {
 		external: ['vscode'],
 		logLevel: 'silent',
 		plugins: [
-			/* add to the end of plugins array */
+			copyWasmPlugin,
 			esbuildProblemMatcherPlugin,
 		],
 	});
